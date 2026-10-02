@@ -382,7 +382,15 @@ void SpoilerLog_Write() {
     jsonFile << std::setw(4) << jsonString << std::endl;
     jsonFile.close();
 
+#ifdef __PS4__
+    // No relative paths on PS4.
+    CVarSetString(CVAR_GENERAL("SpoilerLog"),
+                  Ship::Context::GetPathRelativeToAppDirectory(
+                      (std::string("Randomizer/") + fileName + std::string(".json")).c_str())
+                      .c_str());
+#else
     CVarSetString(CVAR_GENERAL("SpoilerLog"), (std::string("./Randomizer/") + fileName + std::string(".json")).c_str());
+#endif
 }
 
 void PlacementLog_Msg(std::string_view msg) {

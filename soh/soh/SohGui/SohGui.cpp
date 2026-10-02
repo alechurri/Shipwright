@@ -109,6 +109,11 @@ std::shared_ptr<SohMenu> GetSohMenu() {
 
 void SetupMenu() {
     auto gui = Ship::Context::GetInstance()->GetWindow()->GetGui();
+#ifdef __PS4__
+    // The game is closed from the system menu, often with the port menu still open, and its
+    // open/closed state is saved: don't greet the player with it at the next start.
+    CVarSetInteger(CVAR_WINDOW("Menu"), 0);
+#endif
     mSohMenu = std::make_shared<SohMenu>(CVAR_WINDOW("Menu"), "Port Menu");
     gui->SetMenu(mSohMenu);
 

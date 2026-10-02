@@ -56,6 +56,11 @@
 #include <SDL2/SDL_scancode.h>
 #endif
 
+#ifdef __PS4__
+#include <SDL2/SDL.h>
+#include <ship/port/ps4/Ps4Platform.h>
+#endif
+
 #ifdef __SWITCH__
 #include <port/switch/SwitchImpl.h>
 #elif defined(__WIIU__)
@@ -387,6 +392,84 @@ namespace SohGui {
 extern std::shared_ptr<SohGui::SohMenu> mSohMenu;
 }
 
+#ifdef __PS4__
+// Console build: there is no ROM extractor here. The archives are generated with the PC release
+// of the same version and copied to the data directory, so all that is left to do at boot is to
+// check that they are there and tell the player what to do when they aren't.
+void OTRGlobals::RunExtract(int argc, char* argv[]) {
+    auto wnd = std::dynamic_pointer_cast<Fast::Fast3dWindow>(OTRGlobals::Instance->context->GetWindow());
+    auto gui = wnd->GetGui();
+
+    OTRVersion vanillaVersion = DetectOTRVersion("oot.o2r", false);
+    OTRVersion mqVersion = DetectOTRVersion("oot-mq.o2r", true);
+    const bool outdatedRomArchive = VerifyArchiveVersion(vanillaVersion) || VerifyArchiveVersion(mqVersion);
+    const bool haveRomArchive =
+        std::filesystem::exists(Ship::Context::LocateFileAcrossAppDirs("oot-mq.o2r", appShortName)) ||
+        std::filesystem::exists(Ship::Context::LocateFileAcrossAppDirs("oot.o2r", appShortName));
+    const std::string dataPath = Ship::Context::GetAppDirectoryPath(appShortName);
+    const std::string buildVersion = fmt::format("{}.{}.{}", gBuildVersionMajor, gBuildVersionMinor, gBuildVersionPatch);
+
+    std::string title;
+    std::string message;
+    if (!sohArchiveVersionMatch) {
+        title = !std::filesystem::exists(portArchivePath) ? "Missing soh.o2r" : "soh.o2r is outdated";
+        message = "This build needs the soh.o2r of Ship of Harkinian " + buildVersion + ".\nCopy it to " + dataPath +
+                  "/ and start the game again.";
+    } else if (outdatedRomArchive) {
+        title = "Outdated ROM Archives";
+        message = "The oot.o2r / oot-mq.o2r in " + dataPath +
+                  "/ were created with an incompatible version of Ship of Harkinian.\nGenerate them again with the " +
+                  buildVersion + " PC release and copy them over.";
+    } else if (!haveRomArchive) {
+        title = "No ROM Archives";
+        message = "No oot.o2r or oot-mq.o2r found.\nGenerate one from your ROM with the Ship of Harkinian " +
+                  buildVersion + " PC release and copy it to " + dataPath + "/";
+    } else {
+        CheckAndCreateModFolder();
+        return;
+    }
+
+    SPDLOG_ERROR("{}: {}", title, message);
+    message += "\n\nPress OPTIONS to exit.";
+    SohGui::RegisterPopup(title, message, "OK", "", [&]() { exit(1); });
+
+    // The game hasn't set up its controllers yet, do it for this screen.
+    SDL_InitSubSystem(SDL_INIT_GAMECONTROLLER);
+    Ship::Ps4::AttachPad();
+    SDL_GameController* controller = nullptr;
+    for (int i = 0; i < SDL_NumJoysticks() && controller == nullptr; i++) {
+        if (SDL_IsGameController(i)) {
+            controller = SDL_GameControllerOpen(i);
+        }
+    }
+
+    while (true) {
+        if (!WindowIsRunning()) {
+            exit(0);
+        }
+        // Process window events (also updates the controllers)
+        wnd->HandleEvents();
+        if (controller != nullptr && SDL_GameControllerGetButton(controller, SDL_CONTROLLER_BUTTON_START)) {
+            exit(1);
+        }
+
+        if (!wnd->IsFrameReady()) {
+            continue;
+        }
+
+        UIWidgets::Colors themeColor =
+            static_cast<UIWidgets::Colors>(CVarGetInteger(CVAR_SETTING("Menu.Theme"), UIWidgets::Colors::LightBlue));
+        ImGui::PushStyleColor(ImGuiCol_TitleBgActive, UIWidgets::ColorValues.at(themeColor));
+        ImGui::PushStyleColor(ImGuiCol_ModalWindowDimBg, UIWidgets::ColorValues.at(UIWidgets::Colors::DarkGray));
+        gui->StartDraw();
+        sohFast3dWindow->StartFrame();
+        sohFast3dWindow->RunGuiOnly();
+        gui->EndDraw();
+        sohFast3dWindow->EndFrame();
+        ImGui::PopStyleColor(2);
+    }
+}
+#else
 void OTRGlobals::RunExtract(int argc, char* argv[]) {
     bool extractDone = false;
     ExtractSteps extractStep = ES_PORT_ARCHIVE;
@@ -762,6 +845,7 @@ void OTRGlobals::RunExtract(int argc, char* argv[]) {
     Ship::WiiU::Init(appShortName);
 #endif
 }
+#endif // __PS4__
 
 void OTRGlobals::Initialize() {
     std::string mqPath = Ship::Context::LocateFileAcrossAppDirs("oot-mq.o2r", appShortName);
@@ -1445,7 +1529,12 @@ OTRVersion DetectOTRVersion(std::string fileName, bool isMQ) {
 }
 
 extern "C" void Messagebox_ShowErrorBox(char* title, char* body) {
+#ifdef __PS4__
+    // No native message boxes without the extractor module, the log has to do.
+    SPDLOG_ERROR("{}: {}", title, body);
+#else
     Extractor::ShowErrorBox(title, body);
+#endif
 }
 
 bool VerifyArchiveVersion(OTRVersion version) {

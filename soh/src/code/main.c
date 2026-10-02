@@ -56,6 +56,9 @@ int SDL_main(int argc, char* argv[]) {
     // Allow non-ascii characters for Windows
     setlocale(LC_ALL, ".UTF8");
 
+#elif defined(__PS4__)
+// The process entry point is in soh/port/ps4/Ps4Main.cpp, it runs this on a thread with a big stack.
+int soh_main(int argc, char* argv[]) {
 #else //_WIN32
 int main(int argc, char* argv[]) {
 #endif
