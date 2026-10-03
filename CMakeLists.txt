@@ -159,12 +159,8 @@ set(GFX_DEBUG_DISASSEMBLER ON)
 set(GBI_UCODE F3DEX_GBI_2)
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/CMake")
 
-# Enable MPQ and OTR support (PS4 only ships .o2r archives, no StormLib there)
-if(CMAKE_SYSTEM_NAME STREQUAL "PS4")
-    set(INCLUDE_MPQ_SUPPORT OFF)
-else()
-    set(INCLUDE_MPQ_SUPPORT ON)
-endif()
+# Enable MPQ and OTR support
+set(INCLUDE_MPQ_SUPPORT ON)
 
 ################################################################################
 # Set CONTROLLERBUTTONS_T
@@ -178,6 +174,7 @@ add_subdirectory(libultraship ${CMAKE_BINARY_DIR}/libultraship)
 target_compile_options(libultraship PRIVATE "${WARNING_OVERRIDE}")
 if(CMAKE_SYSTEM_NAME STREQUAL "PS4")
     # Assets are extracted on a PC; the console build has no extractor and no packaging rules.
+    target_compile_definitions(libultraship PUBLIC INCLUDE_MPQ_SUPPORT)
     add_subdirectory(soh)
     return()
 endif()
